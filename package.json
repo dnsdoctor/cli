@@ -1,0 +1,46 @@
+{
+  "name": "dns-doctor",
+  "version": "0.1.0",
+  "description": "Command-line DNS Doctor — scan, fix and verify a domain's DNS from the terminal: SPF, DMARC, DKIM, MX, DNS health, blacklists, expiry and six-vantage propagation, over the public DNS Doctor API. Fix records come from a deterministic engine, never an AI guess.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "DNS Doctor",
+    "url": "https://dnsdoctor.dev"
+  },
+  "homepage": "https://dnsdoctor.dev/methodology",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dnsdoctor/cli.git"
+  },
+  "keywords": [
+    "dns",
+    "dmarc",
+    "spf",
+    "dkim",
+    "email",
+    "deliverability",
+    "propagation",
+    "cli"
+  ],
+  "type": "module",
+  "bin": {
+    "dns-doctor": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepack": "npm run build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
