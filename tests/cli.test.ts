@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, PAYMENT_REQUIRED_MESSAGE, RATE_LIMITED_MESSAGE, toApiError } from "../src/api.js";
 import { exitCodeFor, formatDmarcRecord, formatDmarcUpgrade, formatParked, formatPropagation, formatReport, render } from "../src/format.js";
-import { main, parse, run, type Parsed } from "../src/index.js";
+import { isEntryPoint, main, parse, run, type Parsed } from "../src/index.js";
 import { COMMANDS, reportPath, routeFor } from "../src/routes.js";
 
 const FIX = "v=DMARC1; p=quarantine; rua=mailto:dmarc@example.com; np=reject";
@@ -198,5 +198,23 @@ describe("exit codes", () => {
     const invalid = await toApiError(jsonResponse({ detail: "invalid domain" }, 422));
     expect(invalid.transient).toBe(false);
     expect(invalid.message).toBe("invalid domain");
+  });
+});
+
+describe("entry-point detection", () => {
+  it("recognises the module through a bin symlink, the way npx invokes it", async () => {
+    const { mkdtempSync, symlinkSync, writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const { pathToFileURL } = await import("node:url");
+    const dir = mkdtempSync(join(tmpdir(), "dns-doctor-bin-"));
+    const target = join(dir, "index.js");
+    writeFileSync(target, "");
+    const link = join(dir, "dns-doctor");
+    symlinkSync(target, link);
+    expect(isEntryPoint(link, pathToFileURL(target).href)).toBe(true);
+    expect(isEntryPoint(target, pathToFileURL(target).href)).toBe(true);
+    expect(isEntryPoint(join(dir, "other.js"), pathToFileURL(target).href)).toBe(false);
+    expect(isEntryPoint(undefined, pathToFileURL(target).href)).toBe(false);
   });
 });

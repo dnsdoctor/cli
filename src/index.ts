@@ -8,8 +8,9 @@
  * transient (rate limit, 402 offer, outage) — never read 2 as a verdict.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { basename } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { ApiError, DEFAULT_API_BASE, getJson, packageVersion, postFile, postJson } from "./api.js";
@@ -225,9 +226,22 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
-const invokedDirectly =
-  typeof process.argv[1] === "string" && import.meta.url === new URL(`file://${process.argv[1]}`).href;
-if (invokedDirectly) {
+/**
+ * Is this module the process entry point? Compared by REAL path: under
+ * `npx dns-doctor` argv[1] is the `node_modules/.bin` symlink while the module
+ * URL is the target file, and a naive string comparison silently ran nothing
+ * (0.2.0 shipped that way — every npx run exited 0 with no output).
+ */
+export function isEntryPoint(argv1: string | undefined, moduleUrl: string): boolean {
+  if (typeof argv1 !== "string" || argv1 === "") return false;
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(moduleUrl));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntryPoint(process.argv[1], import.meta.url)) {
   main(process.argv.slice(2)).then((code) => {
     process.exitCode = code;
   });
