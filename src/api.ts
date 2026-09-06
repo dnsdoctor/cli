@@ -141,3 +141,13 @@ export function postJson(path: string, body: unknown): Promise<unknown> {
     body: JSON.stringify(body),
   });
 }
+
+/**
+ * POST one file as multipart (`dmarc-report-parse`). The API reads bytes only;
+ * the filename is cosmetic. Node ≥ 20 ships FormData/Blob natively.
+ */
+export function postFile(path: string, field: string, bytes: Uint8Array, filename: string): Promise<unknown> {
+  const form = new FormData();
+  form.append(field, new Blob([bytes as BlobPart], { type: "application/octet-stream" }), filename);
+  return send(path, { method: "POST", body: form });
+}

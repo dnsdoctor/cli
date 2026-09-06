@@ -7,8 +7,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, PAYMENT_REQUIRED_MESSAGE, RATE_LIMITED_MESSAGE, toApiError } from "../src/api.js";
-import { exitCodeFor, formatDmarcUpgrade, formatPropagation, formatReport } from "../src/format.js";
-import { main, parse, run } from "../src/index.js";
+import { exitCodeFor, formatDmarcRecord, formatDmarcUpgrade, formatParked, formatPropagation, formatReport, render } from "../src/format.js";
+import { main, parse, run, type Parsed } from "../src/index.js";
 import { COMMANDS, reportPath, routeFor } from "../src/routes.js";
 
 const FIX = "v=DMARC1; p=quarantine; rua=mailto:dmarc@example.com; np=reject";
@@ -30,11 +30,23 @@ describe("parse", () => {
     expect(parse(["nope", "x"])).toBe("help");
     expect(parse(["scan"])).toBe("help");
     expect(parse(["report", "example.com"])).toBe("help"); // the persisted read is `scan` without --fresh
+    expect(parse(["alerts"])).not.toBe("help"); // the one targetless command
   });
-  it("lists exactly the routed commands", () => {
-    expect(COMMANDS.sort()).toEqual(["dmarc-upgrade", "propagation", "report", "reverse-dns", "scan", "spf-audit"]);
+  it("has a command for every MCP tool's endpoint", () => {
+    expect([...COMMANDS].sort()).toEqual([
+      "alerts", "dkim", "dmarc-generate", "dmarc-upgrade", "dmarc-validate", "parked", "propagation",
+      "readiness", "record", "report-parse", "reverse-dns", "scan", "signup-url", "spf-audit", "spf-count",
+    ]);
   });
 });
+
+function args(command: string, target: string | undefined, extra: Partial<Parsed> = {}): Parsed {
+  return {
+    command, target, json: false, fresh: false, type: "A", expect: undefined, selector: undefined, kind: undefined,
+    host: undefined, rua: undefined, subdomainPolicy: undefined, strict: false, confirmNoMail: false, domain: undefined,
+    since: undefined, before: undefined, alertType: undefined, limit: undefined, ...extra,
+  };
+}
 
 describe("run posts the endpoint's own field names", () => {
   it("scan is the persisted report by default and POST /scan with --fresh", async () => {
@@ -43,8 +55,8 @@ describe("run posts the endpoint's own field names", () => {
       calls.push({ url, init });
       return jsonResponse({ report: { domain: "example.com", checks: [] } });
     });
-    await run({ command: "scan", target: "example.com", json: false, fresh: false, type: "A", expect: undefined });
-    await run({ command: "scan", target: "example.com", json: false, fresh: true, type: "A", expect: undefined });
+    await run(args("scan", "example.com"));
+    await run(args("scan", "example.com", { fresh: true }));
     expect(calls[0]?.url).toBe(`https://dnsdoctor.dev${reportPath("example.com")}`);
     expect(calls[0]?.init?.method).toBe("GET");
     expect(calls[1]?.url).toBe(`https://dnsdoctor.dev${routeFor("scan").path}`);
@@ -56,8 +68,8 @@ describe("run posts the endpoint's own field names", () => {
       bodies.push(JSON.parse(String(init?.body)));
       return jsonResponse({ verdict: "consistent", vantages: [] });
     });
-    await run({ command: "propagation", target: "www.example.com", json: false, fresh: false, type: "TXT", expect: undefined });
-    await run({ command: "propagation", target: "www.example.com", json: false, fresh: false, type: "A", expect: "203.0.113.10" });
+    await run(args("propagation", "www.example.com", { type: "TXT" }));
+    await run(args("propagation", "www.example.com", { expect: "203.0.113.10" }));
     expect(bodies[0]).toEqual({ name: "www.example.com", record_type: "TXT" });
     expect(bodies[1]).toEqual({ name: "www.example.com", record_type: "A", expected_value: "203.0.113.10" });
   });
@@ -67,8 +79,42 @@ describe("run posts the endpoint's own field names", () => {
       ua = String((init?.headers as Record<string, string>)["User-Agent"]);
       return jsonResponse({ ip: "203.0.113.10", verdict: "confirmed", addresses: [] });
     });
-    await run({ command: "reverse-dns", target: "203.0.113.10", json: false, fresh: false, type: "A", expect: undefined });
+    await run(args("reverse-dns", "203.0.113.10"));
     expect(ua).toMatch(/^dnsdoctor-cli\/\d+\.\d+\.\d+ \(\+https:\/\/dnsdoctor\.dev\)$/);
+  });
+  it("the other commands send exactly the endpoint's fields", async () => {
+    const seen: { url: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      seen.push({ url, body: typeof init?.body === "string" ? JSON.parse(init.body) : null });
+      return jsonResponse({});
+    });
+    await run(args("dkim", "example.com", { selector: "google" }));
+    await run(args("record", "example.com", { kind: "mx" }));
+    await run(args("parked", "example.com", { confirmNoMail: true }));
+    await run(args("parked", "example.com", { confirmNoMail: true, rua: "r@example.com" }));
+    await run(args("dmarc-generate", "quarantine", { rua: "r@example.com", strict: true }));
+    await run(args("spf-count", "v=spf1 include:_spf.google.com -all"));
+    await run(args("spf-count", "example.com"));
+    await run(args("alerts", undefined, { domain: "example.com", limit: "5" }));
+    await run(args("readiness", "example.com"));
+    expect(seen.map((s) => s.body)).toEqual([
+      { domain: "example.com", selector: "google" },
+      { domain: "example.com", kind: "mx" },
+      { domain: "example.com", confirm_no_mail: true },
+      { domain: "example.com", confirm_no_mail: true, rua_email: "r@example.com" },
+      { policy: "quarantine", strict_alignment: true, rua_email: "r@example.com" },
+      { record: "v=spf1 include:_spf.google.com -all" },
+      { domain: "example.com" },
+      null,
+      null,
+    ]);
+    expect(seen[7]?.url).toBe("https://dnsdoctor.dev/api/v1/alerts?domain=example.com&limit=5");
+    expect(seen[8]?.url).toBe("https://dnsdoctor.dev/api/v1/readiness?domain=example.com");
+  });
+  it("dkim and record refuse to guess a missing option", async () => {
+    await expect(run(args("dkim", "example.com"))).rejects.toThrow("--selector");
+    await expect(run(args("record", "example.com"))).rejects.toThrow("--kind");
+    await expect(run(args("parked", "example.com"))).rejects.toThrow("--confirm-no-mail");
   });
 });
 
@@ -95,6 +141,14 @@ describe("records are relayed verbatim", () => {
     const none = formatDmarcUpgrade({ domain: "example.com", current_policy: "none", record: null, rationale: "publish rua first" });
     expect(none).toContain("no record recommended");
     expect(none).toContain("publish rua first");
+  });
+  it("prints validate/generate records and the parked pack verbatim", () => {
+    const v = formatDmarcRecord({ valid: true, policy: "none", tags: [], findings: [{ level: "warn", message: "w" }], upgrade_record: FIX, upgrade_note: "n" });
+    expect(v).toContain(`  ${FIX}`);
+    expect(v).toContain("WARN  w");
+    const pack = formatParked({ domain: "example.com", records: [{ step: 1, host: "example.com", record_type: "MX", value: "0 ." }], rationale: null, apply_note: "a" });
+    expect(pack).toContain("example.com  MX  0 .");
+    expect(render("nope", { a: 1 })).toContain('"a": 1');
   });
   it("expands a location only when its resolvers disagree", () => {
     const out = formatPropagation({

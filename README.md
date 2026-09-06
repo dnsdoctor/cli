@@ -15,13 +15,31 @@ No account, no key. The CLI calls the public DNS Doctor API
 
 ## Commands
 
+Every tool the DNS Doctor MCP server exposes has a command here.
+
 ```
-dns-doctor scan <domain>             the persisted report, or a fresh scan when there is none
-dns-doctor scan <domain> --fresh     force a fresh scan
-dns-doctor propagation <name> --type A --expect 203.0.113.10
-dns-doctor dmarc-upgrade <domain>    the next safe DMARC step as a record, or why there is none
-dns-doctor reverse-dns <ip>          forward-confirmed reverse DNS for a mail server address
-dns-doctor spf-audit <domain>        the SPF include tree with registration and lookup findings
+scan & fix
+  dns-doctor scan <domain> [--fresh]              the seven-check report (persisted, or fresh on a miss)
+  dns-doctor dmarc-upgrade <domain>               the next safe DMARC step as a record, or why there is none
+  dns-doctor parked <domain> --confirm-no-mail    the hardening pack for a domain that sends no mail
+  dns-doctor signup-url <domain>                  a sign-up link to hand the domain's owner for monitoring
+
+records
+  dns-doctor dmarc-validate "<record>"            every tag checked, with the safe next step
+  dns-doctor dmarc-generate <none|quarantine|reject> [--rua <email>] [--subdomain-policy <p>] [--strict]
+  dns-doctor spf-count <domain | "v=spf1 …">      DNS lookups against the 10-lookup limit
+  dns-doctor spf-audit <domain>                   the SPF include tree with registration and lookup findings
+  dns-doctor dkim <domain> --selector <s>         a DKIM selector's published key
+  dns-doctor report-parse <file.xml|.gz|.zip>     one DMARC aggregate report as a table
+
+live DNS
+  dns-doctor record <domain> --kind <spf|dmarc|txt|mx|cname|a|aaaa> [--host <label>]
+  dns-doctor propagation <name> [--type A] [--expect <value>]
+  dns-doctor reverse-dns <ip>
+
+monitoring (DNSDOCTOR_API_TOKEN required)
+  dns-doctor alerts [--domain d] [--since t] [--before t] [--alert-type t] [--limit n]
+  dns-doctor readiness <domain>
 ```
 
 Add `--json` to any command to print the API response verbatim — the path for
@@ -32,7 +50,7 @@ scripts and agents.
 | Code | Meaning |
 |---|---|
 | 0 | nothing failing |
-| 1 | a failing verdict (a failed check, a record not propagated, a reverse name that does not point back) |
+| 1 | a failing verdict (a failed check, an invalid or over-limit record, a name not propagated, a reverse name that does not point back, nameservers that disagree) |
 | 2 | an error — including every transient: rate limit, a paid-retry offer (HTTP 402), an outage. **Never read 2 as a verdict about the domain.** |
 
 ## Example
