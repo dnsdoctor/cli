@@ -34,7 +34,7 @@ const ROUTES: Record<string, Route> = {
   parked: { kind: "json", path: "/api/tools/parked-domain-records" },
   alerts: { kind: "query", path: "/api/v1/alerts" },
   readiness: { kind: "query", path: "/api/v1/readiness" },
-  // D116 linked onboarding. The domain rides the body/query on all three — this
+  // Linked onboarding. The domain rides the body/query on all three — this
   // client translates nothing, and a `/domains/{domain}/…` shape would need a
   // fourth route kind to say what `?domain=` already says with none.
   "domain-add": { kind: "json", path: "/api/v1/domains" },
