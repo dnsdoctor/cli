@@ -34,8 +34,12 @@ describe("parse", () => {
   });
   it("has a command for every MCP tool's endpoint", () => {
     expect([...COMMANDS].sort()).toEqual([
-      "alerts", "dkim", "dmarc-generate", "dmarc-upgrade", "dmarc-validate", "parked", "propagation",
+      "alerts", "dkim", "dmarc-generate", "dmarc-upgrade", "dmarc-validate",
+      // D116 linked onboarding — the three account surfaces, each needing a token.
+      "domain-add", "domain-records", "domain-verify",
+      "parked", "propagation",
       "readiness", "record", "report-parse", "reverse-dns", "scan", "signup-url", "spf-audit", "spf-count",
+      "whois",
     ]);
   });
 });

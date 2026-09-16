@@ -41,10 +41,14 @@ live DNS
   propagation <name> [--type A] [--expect <value>]
                                        one name read from six locations on four continents
   reverse-dns <ip>                     forward-confirmed reverse DNS for a mail server address
+  whois <domain>                       registrar, dates, locks and nameservers from the registry
 
 monitoring (DNSDOCTOR_API_TOKEN required)
   alerts [--domain d] [--since t] [--before t] [--alert-type t] [--limit n]
   readiness <domain>                   enforcement readiness from aggregate-report evidence
+  domain-add <domain>                  monitor a domain; prints the ownership TXT record to publish
+  domain-verify <domain>               re-check the ownership record; prints the DMARC record on success
+  domain-records <domain>              the records a monitored domain still needs
 
 options
   --json                               print the API response verbatim
@@ -196,10 +200,17 @@ export async function run(p: Parsed): Promise<unknown> {
     }
     case "reverse-dns":
       return postJson(path("reverse-dns"), { ip: target });
+    case "whois":
+      return postJson(path("whois"), { domain: target });
     case "alerts":
       return getJson(query(path("alerts"), { domain: p.domain, since: p.since, before: p.before, type: p.alertType, limit: p.limit }));
     case "readiness":
       return getJson(query(path("readiness"), { domain: target }));
+    case "domain-add":
+    case "domain-verify":
+      return postJson(path(p.command), { domain: target });
+    case "domain-records":
+      return getJson(query(path("domain-records"), { domain: target }));
     default:
       throw new Error(`unknown command ${p.command}`);
   }

@@ -276,11 +276,37 @@ export function formatReadiness(body: unknown): string {
   return lines.join("\n");
 }
 
+/** `whois`: the registry's own answer, or why there is none. Observation only. */
+function formatWhois(body: unknown): string {
+  const result = rec(body);
+  const status = str(result.status);
+  if (status !== "registered") {
+    const why = str(result.reason);
+    const head = status === "not_registered" ? "not registered" : `unknown${why ? ` (${why})` : ""}`;
+    return `${str(result.domain) ?? ""}: ${head}`;
+  }
+  const reg = rec(result.registration);
+  const lines = [`${str(result.domain) ?? ""}: registered${str(reg.registrar) ? ` with ${str(reg.registrar)}` : ""}`];
+  for (const [label, key] of [["registered", "registered_at"], ["updated", "updated_at"], ["expires", "expires_at"]] as const) {
+    const value = str(reg[key]);
+    if (value) lines.push(`  ${label}: ${value.slice(0, 10)}`);
+  }
+  const ns = list(reg.nameservers).map((n) => String(n));
+  if (ns.length) lines.push(`  nameservers: ${ns.join(", ")}`);
+  const status_codes = list(reg.status).map((c) => String(c));
+  if (status_codes.length) lines.push(`  status: ${status_codes.join(", ")}`);
+  if (reg.dnssec === true) lines.push("  dnssec: signed");
+  else if (reg.dnssec === false) lines.push("  dnssec: unsigned");
+  lines.push(`  abuse contact: ${str(reg.abuse_email) ?? (reg.redacted === true ? "redacted by the registry" : "not published")}`);
+  return lines.join("\n");
+}
+
 const RENDERERS: Record<string, (body: unknown) => string> = {
   scan: formatReport,
   propagation: formatPropagation,
   "dmarc-upgrade": formatDmarcUpgrade,
   "reverse-dns": formatReverseDns,
+  whois: formatWhois,
   "spf-audit": formatSpfAudit,
   "spf-count": formatSpfCount,
   "dmarc-validate": formatDmarcRecord,
