@@ -36,11 +36,21 @@ live DNS
   dns-doctor record <domain> --kind <spf|dmarc|txt|mx|cname|a|aaaa> [--host <label>]
   dns-doctor propagation <name> [--type A] [--expect <value>]
   dns-doctor reverse-dns <ip>
+  dns-doctor whois <domain>                       registrar, dates, locks and nameservers from the registry
+  dns-doctor lookalikes <domain>                  which close look-alike names resolve or accept mail (facts, never a verdict)
 
 monitoring (DNSDOCTOR_API_TOKEN required)
   dns-doctor alerts [--domain d] [--since t] [--before t] [--alert-type t] [--limit n]
   dns-doctor readiness <domain>
+  dns-doctor lookalike-watch <domain> [--view v] [--sort s] [--q text] [--limit n] [--row-id id]
+  dns-doctor domain-add <domain>                  monitor a domain; prints its TXT ownership challenge
+  dns-doctor domain-verify <domain>               check ownership; prints the one DMARC record to publish
+  dns-doctor domain-records <domain>              the records a monitored domain still needs
 ```
+
+Ownership takes one DNS record: the DMARC record `domain-verify` prints (it
+carries your report address, so it proves ownership and starts the reports), or
+the TXT challenge `domain-add` prints if you cannot edit DMARC.
 
 Add `--json` to any command to print the API response verbatim — the path for
 scripts and agents.
@@ -74,7 +84,8 @@ can silently de-authorise a real sender), so no SPF record is ever proposed.
 ## Environment
 
 - `DNSDOCTOR_API_TOKEN` — optional bearer token (mint one in the DNS Doctor
-  dashboard); raises the anonymous budget. Never required for the commands above.
+  dashboard); raises the anonymous budget, and is required for the monitoring
+  commands. Never required for the others.
 - `DNSDOCTOR_API_BASE` — override the API origin for local runs.
 
 Past the free per-caller allowance the API answers HTTP 402 with an x402 offer

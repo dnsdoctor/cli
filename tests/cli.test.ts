@@ -37,6 +37,7 @@ describe("parse", () => {
       "alerts", "dkim", "dmarc-generate", "dmarc-upgrade", "dmarc-validate",
       // Linked onboarding — the three account surfaces, each needing a token.
       "domain-add", "domain-records", "domain-verify",
+      "lookalike-watch", "lookalikes",
       "parked", "propagation",
       "readiness", "record", "report-parse", "reverse-dns", "scan", "signup-url", "spf-audit", "spf-count",
       "whois",
@@ -48,7 +49,8 @@ function args(command: string, target: string | undefined, extra: Partial<Parsed
   return {
     command, target, json: false, fresh: false, type: "A", expect: undefined, selector: undefined, kind: undefined,
     host: undefined, rua: undefined, subdomainPolicy: undefined, strict: false, confirmNoMail: false, domain: undefined,
-    since: undefined, before: undefined, alertType: undefined, limit: undefined, ...extra,
+    since: undefined, before: undefined, alertType: undefined, limit: undefined, view: undefined, sort: undefined,
+    q: undefined, rowId: undefined, ...extra,
   };
 }
 
@@ -101,6 +103,8 @@ describe("run posts the endpoint's own field names", () => {
     await run(args("spf-count", "example.com"));
     await run(args("alerts", undefined, { domain: "example.com", limit: "5" }));
     await run(args("readiness", "example.com"));
+    await run(args("lookalikes", "example.com"));
+    await run(args("lookalike-watch", "example.com", { view: "all", rowId: "abc" }));
     expect(seen.map((s) => s.body)).toEqual([
       { domain: "example.com", selector: "google" },
       { domain: "example.com", kind: "mx" },
@@ -111,9 +115,13 @@ describe("run posts the endpoint's own field names", () => {
       { domain: "example.com" },
       null,
       null,
+      { domain: "example.com" },
+      null,
     ]);
     expect(seen[7]?.url).toBe("https://dnsdoctor.dev/api/v1/alerts?domain=example.com&limit=5");
     expect(seen[8]?.url).toBe("https://dnsdoctor.dev/api/v1/readiness?domain=example.com");
+    expect(seen[9]?.url).toBe("https://dnsdoctor.dev/api/tools/lookalikes");
+    expect(seen[10]?.url).toBe("https://dnsdoctor.dev/api/v1/lookalikes?domain=example.com&view=all&row_id=abc");
   });
   it("dkim and record refuse to guess a missing option", async () => {
     await expect(run(args("dkim", "example.com"))).rejects.toThrow("--selector");

@@ -2,7 +2,7 @@
  * Command → REST endpoint. The CLI translates nothing: each command sends the
  * endpoint's own field names and prints what comes back.
  *
- * Every one of the 17 MCP tools has a command here, so the CLI and the MCP
+ * Every one of the 22 MCP tools has a command here, so the CLI and the MCP
  * clients cover the same API. Pinned by the backend's
  * `tests/mcp_server/test_cli_routes.py` against the real app (path exists,
  * field names are the request model's, and the path SET equals the MCP
@@ -30,10 +30,12 @@ const ROUTES: Record<string, Route> = {
   propagation: { kind: "json", path: "/api/tools/propagation-check" },
   "reverse-dns": { kind: "json", path: "/api/tools/reverse-dns-check" },
   whois: { kind: "json", path: "/api/tools/whois" },
+  lookalikes: { kind: "json", path: "/api/tools/lookalikes" },
   "spf-audit": { kind: "json", path: "/api/tools/spf-audit" },
   parked: { kind: "json", path: "/api/tools/parked-domain-records" },
   alerts: { kind: "query", path: "/api/v1/alerts" },
   readiness: { kind: "query", path: "/api/v1/readiness" },
+  "lookalike-watch": { kind: "query", path: "/api/v1/lookalikes" },
   // Linked onboarding. The domain rides the body/query on all three — this
   // client translates nothing, and a `/domains/{domain}/…` shape would need a
   // fourth route kind to say what `?domain=` already says with none.

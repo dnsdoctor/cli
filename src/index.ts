@@ -42,12 +42,16 @@ live DNS
                                        one name read from six locations on four continents
   reverse-dns <ip>                     forward-confirmed reverse DNS for a mail server address
   whois <domain>                       registrar, dates, locks and nameservers from the registry
+  lookalikes <domain>                  which close look-alike names resolve or accept mail (facts, never a verdict)
 
 monitoring (DNSDOCTOR_API_TOKEN required)
   alerts [--domain d] [--since t] [--before t] [--alert-type t] [--limit n]
   readiness <domain>                   enforcement readiness from aggregate-report evidence
-  domain-add <domain>                  monitor a domain; prints the ownership TXT record to publish
-  domain-verify <domain>               re-check the ownership record; prints the DMARC record on success
+  lookalike-watch <domain> [--view v] [--sort s] [--q text] [--limit n] [--row-id id]
+                                       the watched look-alike names of a monitored domain, threat % first
+  domain-add <domain>                  monitor a domain; prints its TXT ownership challenge
+  domain-verify <domain>               check ownership; prints the one DMARC record to publish, which
+                                       proves ownership and starts reports (the TXT is the alternative)
   domain-records <domain>              the records a monitored domain still needs
 
 options
@@ -76,6 +80,10 @@ export interface Parsed {
   before: string | undefined;
   alertType: string | undefined;
   limit: string | undefined;
+  view: string | undefined;
+  sort: string | undefined;
+  q: string | undefined;
+  rowId: string | undefined;
 }
 
 const TARGETLESS = new Set(["alerts"]);
@@ -101,6 +109,10 @@ export function parse(argv: string[]): Parsed | "help" | "version" {
       before: { type: "string" },
       "alert-type": { type: "string" },
       limit: { type: "string" },
+      view: { type: "string" },
+      sort: { type: "string" },
+      q: { type: "string" },
+      "row-id": { type: "string" },
       help: { type: "boolean", default: false },
       version: { type: "boolean", default: false },
     },
@@ -128,6 +140,10 @@ export function parse(argv: string[]): Parsed | "help" | "version" {
     before: values.before,
     alertType: values["alert-type"],
     limit: values.limit,
+    view: values.view,
+    sort: values.sort,
+    q: values.q,
+    rowId: values["row-id"],
   };
 }
 
@@ -202,10 +218,16 @@ export async function run(p: Parsed): Promise<unknown> {
       return postJson(path("reverse-dns"), { ip: target });
     case "whois":
       return postJson(path("whois"), { domain: target });
+    case "lookalikes":
+      return postJson(path("lookalikes"), { domain: target });
     case "alerts":
       return getJson(query(path("alerts"), { domain: p.domain, since: p.since, before: p.before, type: p.alertType, limit: p.limit }));
     case "readiness":
       return getJson(query(path("readiness"), { domain: target }));
+    case "lookalike-watch":
+      return getJson(
+        query(path("lookalike-watch"), { domain: target, view: p.view, sort: p.sort, q: p.q, limit: p.limit, row_id: p.rowId }),
+      );
     case "domain-add":
     case "domain-verify":
       return postJson(path(p.command), { domain: target });
