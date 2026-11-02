@@ -43,6 +43,12 @@ live DNS
   reverse-dns <ip>                     forward-confirmed reverse DNS for a mail server address
   whois <domain>                       registrar, dates, locks and nameservers from the registry
   lookalikes <domain>                  which close look-alike names resolve or accept mail (facts, never a verdict)
+  bimi <domain> [--logo-url <url>] [--certificate-url <url>]
+                                       logo readiness per mailbox (eligibility, never a promise the logo shows)
+
+email test
+  email-test-start                     a single-use address: send one real email to it yourself
+  email-test <test_id>                 how that message authenticated, scored out of 10
 
 monitoring (DNSDOCTOR_API_TOKEN required)
   alerts [--domain d] [--since t] [--before t] [--alert-type t] [--limit n]
@@ -53,6 +59,8 @@ monitoring (DNSDOCTOR_API_TOKEN required)
   domain-verify <domain>               check ownership; prints the one DMARC record to publish, which
                                        proves ownership and starts reports (the TXT is the alternative)
   domain-records <domain>              the records a monitored domain still needs
+  domains                              every domain on the account, its state and next step
+  email-tests [--domain d] [--limit n] the account's earlier email tests, newest first
 
 options
   --json                               print the API response verbatim
@@ -84,9 +92,11 @@ export interface Parsed {
   sort: string | undefined;
   q: string | undefined;
   rowId: string | undefined;
+  logoUrl: string | undefined;
+  certificateUrl: string | undefined;
 }
 
-const TARGETLESS = new Set(["alerts"]);
+const TARGETLESS = new Set(["alerts", "domains", "email-test-start", "email-tests"]);
 
 export function parse(argv: string[]): Parsed | "help" | "version" {
   const { values, positionals } = parseArgs({
@@ -113,6 +123,8 @@ export function parse(argv: string[]): Parsed | "help" | "version" {
       sort: { type: "string" },
       q: { type: "string" },
       "row-id": { type: "string" },
+      "logo-url": { type: "string" },
+      "certificate-url": { type: "string" },
       help: { type: "boolean", default: false },
       version: { type: "boolean", default: false },
     },
@@ -144,6 +156,8 @@ export function parse(argv: string[]): Parsed | "help" | "version" {
     sort: values.sort,
     q: values.q,
     rowId: values["row-id"],
+    logoUrl: values["logo-url"],
+    certificateUrl: values["certificate-url"],
   };
 }
 
@@ -233,6 +247,24 @@ export async function run(p: Parsed): Promise<unknown> {
       return postJson(path(p.command), { domain: target });
     case "domain-records":
       return getJson(query(path("domain-records"), { domain: target }));
+    case "domains":
+      return getJson(path("domains"));
+    case "bimi": {
+      if (p.certificateUrl !== undefined && p.logoUrl === undefined) {
+        throw new ApiError("--certificate-url is only used together with --logo-url; see dns-doctor --help", null, false);
+      }
+      const body: Record<string, unknown> = { domain: target };
+      if (p.logoUrl !== undefined) body.logo_url = p.logoUrl;
+      if (p.certificateUrl !== undefined) body.certificate_url = p.certificateUrl;
+      return postJson(path("bimi"), body);
+    }
+    case "email-test-start":
+      // No arguments; a token, when set, picks the account's allowance and history.
+      return postJson(path("email-test-start"), {});
+    case "email-test":
+      return getJson(query(path("email-test"), { test_id: target }));
+    case "email-tests":
+      return getJson(query(path("email-tests"), { domain: p.domain, limit: p.limit }));
     default:
       throw new Error(`unknown command ${p.command}`);
   }

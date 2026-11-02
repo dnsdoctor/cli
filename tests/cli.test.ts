@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, PAYMENT_REQUIRED_MESSAGE, RATE_LIMITED_MESSAGE, toApiError } from "../src/api.js";
-import { exitCodeFor, formatDmarcRecord, formatDmarcUpgrade, formatParked, formatPropagation, formatReport, render } from "../src/format.js";
+import { exitCodeFor, formatBimi, formatDmarcRecord, formatEmailTest, formatEmailTestStart, formatDmarcUpgrade, formatParked, formatPropagation, formatReport, render } from "../src/format.js";
 import { isEntryPoint, main, parse, run, type Parsed } from "../src/index.js";
 import { COMMANDS, reportPath, routeFor } from "../src/routes.js";
 
@@ -30,13 +30,18 @@ describe("parse", () => {
     expect(parse(["nope", "x"])).toBe("help");
     expect(parse(["scan"])).toBe("help");
     expect(parse(["report", "example.com"])).toBe("help"); // the persisted read is `scan` without --fresh
-    expect(parse(["alerts"])).not.toBe("help"); // the one targetless command
+    expect(parse(["alerts"])).not.toBe("help"); // the targetless commands
+    expect(parse(["domains"])).not.toBe("help");
+    expect(parse(["email-test-start"])).not.toBe("help");
+    expect(parse(["email-tests", "--limit", "5"])).toMatchObject({ command: "email-tests", limit: "5" });
+    expect(parse(["email-test"])).toBe("help"); // the read needs its test_id
   });
   it("has a command for every MCP tool's endpoint", () => {
     expect([...COMMANDS].sort()).toEqual([
-      "alerts", "dkim", "dmarc-generate", "dmarc-upgrade", "dmarc-validate",
+      "alerts", "bimi", "dkim", "dmarc-generate", "dmarc-upgrade", "dmarc-validate",
       // Linked onboarding — the three account surfaces, each needing a token.
-      "domain-add", "domain-records", "domain-verify",
+      "domain-add", "domain-records", "domain-verify", "domains",
+      "email-test", "email-test-start", "email-tests",
       "lookalike-watch", "lookalikes",
       "parked", "propagation",
       "readiness", "record", "report-parse", "reverse-dns", "scan", "signup-url", "spf-audit", "spf-count",
@@ -50,7 +55,7 @@ function args(command: string, target: string | undefined, extra: Partial<Parsed
     command, target, json: false, fresh: false, type: "A", expect: undefined, selector: undefined, kind: undefined,
     host: undefined, rua: undefined, subdomainPolicy: undefined, strict: false, confirmNoMail: false, domain: undefined,
     since: undefined, before: undefined, alertType: undefined, limit: undefined, view: undefined, sort: undefined,
-    q: undefined, rowId: undefined, ...extra,
+    q: undefined, rowId: undefined, logoUrl: undefined, certificateUrl: undefined, ...extra,
   };
 }
 
@@ -123,6 +128,31 @@ describe("run posts the endpoint's own field names", () => {
     expect(seen[9]?.url).toBe("https://dnsdoctor.dev/api/tools/lookalikes");
     expect(seen[10]?.url).toBe("https://dnsdoctor.dev/api/v1/lookalikes?domain=example.com&view=all&row_id=abc");
   });
+  it("the BIMI, email-test and account commands send the endpoint's own names", async () => {
+    const seen: { url: string; method: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      seen.push({ url, method: String(init?.method), body: typeof init?.body === "string" ? JSON.parse(init.body) : null });
+      return jsonResponse({});
+    });
+    await run(args("bimi", "example.com"));
+    await run(args("bimi", "example.com", { logoUrl: "https://example.com/logo.svg", certificateUrl: "https://example.com/vmc.pem" }));
+    await run(args("email-test-start", undefined));
+    await run(args("email-test", "abc_123"));
+    await run(args("email-tests", undefined, { domain: "example.com", limit: "5" }));
+    await run(args("domains", undefined));
+    expect(seen).toEqual([
+      { url: "https://dnsdoctor.dev/api/tools/bimi", method: "POST", body: { domain: "example.com" } },
+      {
+        url: "https://dnsdoctor.dev/api/tools/bimi",
+        method: "POST",
+        body: { domain: "example.com", logo_url: "https://example.com/logo.svg", certificate_url: "https://example.com/vmc.pem" },
+      },
+      { url: "https://dnsdoctor.dev/api/tools/email-test", method: "POST", body: {} },
+      { url: "https://dnsdoctor.dev/api/tools/email-test?test_id=abc_123", method: "GET", body: null },
+      { url: "https://dnsdoctor.dev/api/v1/email-tests?domain=example.com&limit=5", method: "GET", body: null },
+      { url: "https://dnsdoctor.dev/api/v1/domains/mine", method: "GET", body: null },
+    ]);
+  });
   it("dkim and record refuse to guess a missing option", async () => {
     await expect(run(args("dkim", "example.com"))).rejects.toThrow("--selector");
     await expect(run(args("record", "example.com"))).rejects.toThrow("--kind");
@@ -162,6 +192,51 @@ describe("records are relayed verbatim", () => {
     expect(pack).toContain("example.com  MX  0 .");
     expect(render("nope", { a: 1 })).toContain('"a": 1');
   });
+  it("prints the BIMI record and the email-test DMARC fix verbatim", () => {
+    const BIMI = "v=BIMI1; l=https://example.com/logo.svg;";
+    const bimi = formatBimi({
+      domain: "example.com", status: "needs_logo", next_step: "Publish the record.",
+      findings: [{ part: "record", state: "missing", message: "No BIMI record." }],
+      mailboxes: [{ mailbox: "Yahoo", label: "can show", observed: "Nothing else needed." }],
+      generated: { host: "default._bimi.example.com", record: BIMI, rationale: "r" },
+    });
+    expect(bimi).toContain(`  ${BIMI}`);
+    expect(bimi).toContain("TXT at default._bimi.example.com");
+    expect(bimi).toContain("eligibility only");
+    const received = formatEmailTest({
+      test_id: "t1", status: "received", report_url: "https://dnsdoctor.dev/email-test/t1", advice: ["a"],
+      result: {
+        from_domain: "example.com",
+        score: { value: 8.5, out_of: 10, deductions: [{ code: "dmarc_fail", points: 1.5, applied: 1.5, reason: "DMARC failed" }], not_scored: [] },
+        spf: { result: "pass" }, dkim: [{ domain: "example.com", result: "pass" }],
+        dmarc: { result: "fail", fix: { host: "_dmarc.example.com", record: FIX } },
+        estimates: { providers: { gmail: { accepted_pct: 90, inbox_pct: null } } },
+      },
+    });
+    expect(received).toContain("score: 8.5 of 10");
+    expect(received).toContain("-1.5  DMARC failed");
+    expect(received).toContain(`  ${FIX}`);
+    expect(received).toContain("accepted 90% · inbox not estimated");
+    const authOnly = formatEmailTest({
+      test_id: "t2",
+      status: "received",
+      result: { coverage: "auth_only", score: { value: 9.9, out_of: 10, deductions: [{ applied: 0, reason: "capped" }] }, estimates: { providers: { gmail: { accepted_pct: null, inbox_pct: null, unrated_reason: "risky_attachment" } } } },
+    });
+    expect(authOnly).toContain("score: 9.9 of 10 (sender authentication only; the content was not checked)");
+    expect(authOnly).not.toContain("-0  capped");
+    expect(authOnly).toContain("accepted not estimated · inbox not estimated (risky attachment)");
+    expect(formatEmailTest({ test_id: "t3", status: "received", result: {} })).toContain("score: none (this test predates scoring)");
+    expect(exitCodeFor("email-test", { status: "expired" })).toBe(1);
+    expect(exitCodeFor("email-test", { status: "error" })).toBe(1);
+    expect(exitCodeFor("email-test", { status: "pending" })).toBe(0);
+    expect(received).toContain("report: https://dnsdoctor.dev/email-test/t1");
+    expect(formatEmailTest({ test_id: "t1", status: "pending", address: "x@t.example", received_at: null })).toContain("send one email to x@t.example");
+    expect(formatEmailTestStart({ test_id: "t1", address: "x@t.example", limit: { applied: "anonymous", per_day: 3, used_today: 0 } })).toContain(
+      "dns-doctor email-test t1",
+    );
+    expect(render("domains", { domains: [], next_step: "Add one." })).toBe("no domains on this account\n  Add one.");
+    expect(render("email-tests", { tests: [], count: 0 })).toBe("no email tests");
+  });
   it("expands a location only when its resolvers disagree", () => {
     const out = formatPropagation({
       name: "x", record_type: "A", verdict: "partial", vantage_reached: 1, vantage_total: 1,
@@ -192,6 +267,11 @@ describe("exit codes", () => {
     expect(exitCodeFor("propagation", { verdict: "not_propagated" })).toBe(1);
     expect(exitCodeFor("propagation", { verdict: "unknown" })).toBe(0);
     expect(exitCodeFor("reverse-dns", { verdict: "ptr_missing" })).toBe(1);
+    expect(exitCodeFor("bimi", { status: "broken" })).toBe(1);
+    expect(exitCodeFor("bimi", { status: "unknown" })).toBe(0);
+    expect(exitCodeFor("email-test", { status: "received", result: { dmarc: { result: "fail" } } })).toBe(1);
+    expect(exitCodeFor("email-test", { status: "received", result: { dmarc: { result: "temperror" } } })).toBe(0);
+    expect(exitCodeFor("email-test", { status: "pending", result: null })).toBe(0);
   });
   it("a transient (429, 402, 503, network) exits 2 and is never read as a verdict", async () => {
     const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);

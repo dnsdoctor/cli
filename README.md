@@ -38,6 +38,12 @@ live DNS
   dns-doctor reverse-dns <ip>
   dns-doctor whois <domain>                       registrar, dates, locks and nameservers from the registry
   dns-doctor lookalikes <domain>                  which close look-alike names resolve or accept mail (facts, never a verdict)
+  dns-doctor bimi <domain> [--logo-url <url>] [--certificate-url <url>]
+                                                  logo readiness per mailbox (eligibility, never a promise the logo shows)
+
+email test
+  dns-doctor email-test-start                     a single-use address: send one real email to it yourself
+  dns-doctor email-test <test_id>                 how that message authenticated, scored out of 10
 
 monitoring (DNSDOCTOR_API_TOKEN required)
   dns-doctor alerts [--domain d] [--since t] [--before t] [--alert-type t] [--limit n]
@@ -46,7 +52,17 @@ monitoring (DNSDOCTOR_API_TOKEN required)
   dns-doctor domain-add <domain>                  monitor a domain; prints its TXT ownership challenge
   dns-doctor domain-verify <domain>               check ownership; prints the one DMARC record to publish
   dns-doctor domain-records <domain>              the records a monitored domain still needs
+  dns-doctor domains                              every domain on the account, its state and next step
+  dns-doctor email-tests [--domain d] [--limit n] the account's earlier email tests, newest first
 ```
+
+An email test takes two steps: `email-test-start` prints a single-use address
+(valid about an hour, one message), you send one email to it from the mailbox or
+service you want to check, then `email-test <test_id>` prints the result: SPF,
+every DKIM signature, DMARC alignment, a score out of 10 with each deduction, and
+per-mailbox estimates (estimates, never a promise of delivery). Run it again
+while it says `pending`. With `DNSDOCTOR_API_TOKEN` set, the test counts against
+your account's allowance and appears in `email-tests`.
 
 Ownership takes one DNS record: the DMARC record `domain-verify` prints (it
 carries your report address, so it proves ownership and starts the reports), or
@@ -60,7 +76,7 @@ scripts and agents.
 | Code | Meaning |
 |---|---|
 | 0 | nothing failing |
-| 1 | a failing verdict (a failed check, an invalid or over-limit record, a name not propagated, a reverse name that does not point back, nameservers that disagree) |
+| 1 | a failing verdict (a failed check, an invalid or over-limit record, a name not propagated, a reverse name that does not point back, nameservers that disagree, a broken BIMI setup, an email test whose DMARC failed, or one that expired or could not be checked) |
 | 2 | an error — including every transient: rate limit, a paid-retry offer (HTTP 402), an outage. **Never read 2 as a verdict about the domain.** |
 
 ## Example

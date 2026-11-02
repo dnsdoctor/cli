@@ -301,6 +301,131 @@ function formatWhois(body: unknown): string {
   return lines.join("\n");
 }
 
+/** `bimi`: the status, what was found, eligibility per mailbox, the record verbatim. */
+export function formatBimi(body: unknown): string {
+  const result = rec(body);
+  const lines = [`${str(result.domain) ?? "?"} BIMI: ${str(result.status) ?? "?"}`];
+  const next = str(result.next_step);
+  if (next) lines.push(`  next: ${next}`);
+  const published = str(result.published_record);
+  if (published) lines.push(`  published at ${str(result.record_location) ?? "?"}: ${published}`);
+  for (const f of list(result.findings)) {
+    const finding = rec(f);
+    lines.push(`  ${String(finding.state ?? "").toUpperCase().padEnd(8)} ${str(finding.part) ?? ""}: ${str(finding.message) ?? ""}`);
+  }
+  const mailboxes = list(result.mailboxes);
+  if (mailboxes.length) lines.push("  mailboxes (eligibility only; each mailbox decides whether a logo shows):");
+  for (const m of mailboxes) {
+    const row = rec(m);
+    lines.push(`    ${String(row.mailbox ?? "?").padEnd(14)} ${str(row.label) ?? ""}: ${str(row.observed) ?? ""}`);
+  }
+  const generated = rec(result.generated);
+  const record = str(generated.record);
+  if (record) lines.push(`  record (TXT at ${str(generated.host) ?? "?"}; ${RECORD_NOTE}):`, `  ${record}`);
+  const rationale = str(generated.rationale);
+  if (rationale) lines.push(`  ${rationale}`);
+  return lines.join("\n");
+}
+
+/** `email-test-start`: the address to send to and the command that reads the result. */
+export function formatEmailTestStart(body: unknown): string {
+  const result = rec(body);
+  const limit = rec(result.limit);
+  const id = str(result.test_id) ?? "?";
+  return [
+    `send one email to: ${str(result.address) ?? "?"}`,
+    `  test id: ${id}`,
+    `  expires: ${str(result.expires_at) ?? "?"} (takes one message)`,
+    `  daily limit: ${limit.used_today ?? "?"} of ${limit.per_day ?? "?"} used (${str(limit.applied) ?? "?"})`,
+    `Send it yourself, from the mail app or service you want to test, then run: dns-doctor email-test ${id}`,
+  ].join("\n");
+}
+
+/** `email-test`: the status; once received, the score, its deductions and the DMARC fix verbatim. */
+export function formatEmailTest(body: unknown): string {
+  const top = rec(body);
+  const status = str(top.status) ?? "?";
+  const lines = [`${str(top.test_id) ?? "?"}: ${status}`];
+  if (status === "pending") {
+    lines.push(
+      str(top.received_at)
+        ? "  the message arrived and is being checked; run this command again in a few seconds"
+        : `  no message has arrived yet; send one email to ${str(top.address) ?? "?"}, then run this command again`,
+    );
+  } else if (status === "expired" || status === "error") {
+    if (status === "error") lines.push(`  error: ${str(top.error) ?? "?"}`);
+    lines.push("  start a new test with: dns-doctor email-test-start");
+  }
+  const result = rec(top.result);
+  if (status === "received") {
+    if (str(result.from_domain)) lines.push(`  from: ${str(result.from_domain)}`);
+    const score = rec(result.score);
+    if (score.value === undefined) {
+      lines.push("  score: none (this test predates scoring)");
+    } else {
+      const authOnly = str(result.coverage) === "auth_only" ? " (sender authentication only; the content was not checked)" : "";
+      lines.push(`  score: ${score.value} of ${score.out_of ?? 10}${authOnly}`);
+    }
+    for (const d of list(score.deductions)) {
+      const row = rec(d);
+      const applied = row.applied ?? row.points;
+      if (applied === 0) continue; // its category cap was already reached, so it cost nothing
+      lines.push(`    -${applied ?? "?"}  ${str(row.reason) ?? str(row.code) ?? ""}`);
+    }
+    for (const n of list(score.not_scored)) {
+      const row = rec(n);
+      lines.push(`    not scored: ${str(row.check) ?? ""}: ${str(row.reason) ?? ""}`);
+    }
+    const dkim = list(result.dkim).map((s) => `${str(rec(s).domain) ?? "?"}=${str(rec(s).result) ?? "?"}`);
+    lines.push(`  spf ${str(rec(result.spf).result) ?? "?"} · dkim ${dkim.join(", ") || "none"} · dmarc ${str(rec(result.dmarc).result) ?? "?"}`);
+    const providers = rec(rec(result.estimates).providers);
+    if (Object.keys(providers).length) lines.push("  estimates (not a promise of delivery):");
+    for (const [name, value] of Object.entries(providers)) {
+      const row = rec(value);
+      const pct = (v: unknown) => (typeof v === "number" ? `${v}%` : "not estimated");
+      const reason = str(row.unrated_reason) ? ` (${str(row.unrated_reason)!.replace(/_/g, " ")})` : "";
+      lines.push(`    ${name.padEnd(10)} accepted ${pct(row.accepted_pct)} · inbox ${pct(row.inbox_pct)}${reason}`);
+    }
+    const fix = rec(rec(result.dmarc).fix);
+    const record = str(fix.record);
+    if (record) lines.push(`  dmarc fix (TXT at ${str(fix.host) ?? "?"}; ${RECORD_NOTE}):`, `  ${record}`);
+    const withheld = str(rec(result.dmarc).fix_withheld);
+    if (!record && withheld) lines.push(`  ${withheld}`);
+    for (const a of list(top.advice)) if (typeof a === "string") lines.push(`  · ${a}`);
+  }
+  const reportUrl = str(top.report_url);
+  if (reportUrl) lines.push(`  report: ${reportUrl}`);
+  return lines.join("\n");
+}
+
+/** `email-tests`: one line per earlier test, newest first as the API orders them. */
+export function formatEmailTests(body: unknown): string {
+  const tests = list(rec(body).tests);
+  if (tests.length === 0) return "no email tests";
+  const note = tests.some((t) => str(rec(t).coverage) === "auth_only") ? "\n* score covers sender authentication only" : "";
+  return tests
+    .map((t) => {
+      const test = rec(t);
+      const score = rec(test.score);
+      const scored = score.value !== undefined ? `${score.value}/${score.out_of ?? 10}${str(test.coverage) === "auth_only" ? "*" : ""}` : "-";
+      return `${String(test.created_at ?? "").slice(0, 19)}  ${String(test.status ?? "").padEnd(8)} ${String(test.from_domain ?? "-").padEnd(24)} ${scored.padEnd(6)} dmarc ${str(test.dmarc_result) ?? "-"}  ${str(test.test_id) ?? ""}${str(test.report_url) ? `  ${str(test.report_url)}` : ""}`;
+    })
+    .join("\n") + note;
+}
+
+/** `domains`: each domain on the account with its state and the next step as given. */
+export function formatDomains(body: unknown): string {
+  const result = rec(body);
+  const domains = list(result.domains);
+  if (domains.length === 0) return `no domains on this account${str(result.next_step) ? `\n  ${str(result.next_step)}` : ""}`;
+  return domains
+    .map((d) => {
+      const row = rec(d);
+      return `${String(row.domain ?? "?").padEnd(28)} ${String(row.state ?? "?").padEnd(20)} ${str(row.next_step) ?? ""}`;
+    })
+    .join("\n");
+}
+
 const RENDERERS: Record<string, (body: unknown) => string> = {
   scan: formatReport,
   propagation: formatPropagation,
@@ -318,6 +443,11 @@ const RENDERERS: Record<string, (body: unknown) => string> = {
   "signup-url": formatSignupUrl,
   alerts: formatAlerts,
   readiness: formatReadiness,
+  bimi: formatBimi,
+  "email-test-start": formatEmailTestStart,
+  "email-test": formatEmailTest,
+  "email-tests": formatEmailTests,
+  domains: formatDomains,
 };
 
 export function render(command: string, body: unknown): string {
@@ -348,6 +478,13 @@ export function exitCodeFor(command: string, body: unknown): 0 | 1 {
       return result.valid === false ? 1 : 0;
     case "record":
       return rec(result.authoritative).ns_in_agreement === false ? 1 : 0;
+    case "bimi":
+      return str(result.status) === "broken" ? 1 : 0;
+    case "email-test": {
+      const status = str(result.status);
+      if (status === "expired" || status === "error") return 1; // no result to trust
+      return str(rec(rec(result.result).dmarc).result) === "fail" ? 1 : 0;
+    }
     default:
       return 0;
   }

@@ -2,7 +2,7 @@
  * Command → REST endpoint. The CLI translates nothing: each command sends the
  * endpoint's own field names and prints what comes back.
  *
- * Every one of the 22 MCP tools has a command here, so the CLI and the MCP
+ * Every one of the 27 MCP tools has a command here, so the CLI and the MCP
  * clients cover the same API. Pinned by the backend's
  * `tests/mcp_server/test_cli_routes.py` against the real app (path exists,
  * field names are the request model's, and the path SET equals the MCP
@@ -42,6 +42,13 @@ const ROUTES: Record<string, Route> = {
   "domain-add": { kind: "json", path: "/api/v1/domains" },
   "domain-verify": { kind: "json", path: "/api/v1/domains/verify" },
   "domain-records": { kind: "query", path: "/api/v1/domains/records" },
+  domains: { kind: "query", path: "/api/v1/domains/mine" },
+  bimi: { kind: "json", path: "/api/tools/bimi" },
+  // One email test: start (POST) and read (GET) share the path; the history
+  // read needs a token.
+  "email-test-start": { kind: "json", path: "/api/tools/email-test" },
+  "email-test": { kind: "query", path: "/api/tools/email-test" },
+  "email-tests": { kind: "query", path: "/api/v1/email-tests" },
 };
 
 export function routeFor(command: string): Route {
