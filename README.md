@@ -1,5 +1,7 @@
 # dns-doctor — DNS Doctor from the terminal
 
+**Get your domain's email working, and know it stays that way.** See why mail lands in spam, get the exact DNS record to fix it, and check the change is live everywhere.
+
 Scan, fix and verify a domain's DNS without leaving the shell: email
 authentication (SPF, DMARC, DKIM), MX, DNS health, blacklists, domain/SSL expiry
 and propagation read from six locations on four continents. Every fix record

@@ -1,7 +1,7 @@
 {
   "name": "dns-doctor",
-  "version": "0.5.0",
-  "description": "Command-line DNS Doctor — scan, fix and verify a domain's DNS from the terminal: SPF, DMARC, DKIM, MX, DNS health, blacklists, expiry and six-vantage propagation, over the public DNS Doctor API. Fix records come from a deterministic engine, never an AI guess.",
+  "version": "0.5.1",
+  "description": "DNS Doctor from the terminal: find out why a domain's email lands in spam, get the exact DNS record to fix it and check the change is live everywhere. SPF, DMARC, DKIM, MX, propagation, blacklists and expiry. Fix records come from a validating engine, never an AI guess.",
   "license": "Apache-2.0",
   "author": {
     "name": "DNS Doctor",

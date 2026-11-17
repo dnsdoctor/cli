@@ -2,7 +2,8 @@
  * Command → REST endpoint. The CLI translates nothing: each command sends the
  * endpoint's own field names and prints what comes back.
  *
- * Every one of the 27 MCP tools has a command here, so the CLI and the MCP
+ * Every MCP tool but watch_record_change (an in-chat ask) and
+ * check_domain_names (a chat's name hunt) has a command here, so the CLI and the MCP
  * clients cover the same API. Pinned by the backend's
  * `tests/mcp_server/test_cli_routes.py` against the real app (path exists,
  * field names are the request model's, and the path SET equals the MCP
