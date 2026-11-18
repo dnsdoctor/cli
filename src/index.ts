@@ -57,7 +57,8 @@ monitoring (DNSDOCTOR_API_TOKEN required)
                                        the watched look-alike names of a monitored domain, threat % first
   domain-add <domain>                  monitor a domain; prints its TXT ownership challenge
   domain-verify <domain>               check ownership; prints the one DMARC record to publish, which
-                                       proves ownership and starts reports (the TXT is the alternative)
+                                       proves ownership and starts reports (the TXT record, or the
+                                       website file when one is offered, is the alternative)
   domain-records <domain>              the records a monitored domain still needs
   domains                              every domain on the account, its state and next step
   email-tests [--domain d] [--limit n] the account's earlier email tests, newest first

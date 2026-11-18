@@ -68,7 +68,9 @@ your account's allowance and appears in `email-tests`.
 
 Ownership takes one DNS record: the DMARC record `domain-verify` prints (it
 carries your report address, so it proves ownership and starts the reports), or
-the TXT challenge `domain-add` prints if you cannot edit DMARC.
+the TXT challenge `domain-add` prints if you cannot edit DMARC. When `--json`
+shows a `website_file`, a file on the domain's own website proves ownership
+too (it does not start the reports).
 
 Add `--json` to any command to print the API response verbatim — the path for
 scripts and agents.
